@@ -1,0 +1,38 @@
+{
+  "schema": "uk-salary-calculator/insights@1",
+  "generatedAt": "2026-05-16T19:19:30.201Z",
+  "model": "sonnet",
+  "source": "claude-code-cli (suscripción Max, sin API key)",
+  "insights": [
+    {
+      "titulo": "Sin pensión: error crítico",
+      "detalle": "Contribuyes 0% a pensión, perdiendo la deducción fiscal y posibles aportaciones del empleador. Con salario de £55.000 (€64.350), aportar un 5% (£229/mes, €268) te ahorraría en torno a £916/año (€1.072) en impuestos al recuperar parte a tipo del 40%.",
+      "severidad": "aviso"
+    },
+    {
+      "titulo": "Eres contribuyente de tipo 40% parcialmente",
+      "detalle": "Tu renta imponible supera el umbral de £50.270, por lo que una parte tributa al 40%. Cada £1 que aportes a pensión por encima de ese umbral te devuelve 40p en impuestos, convirtiéndola en la palanca fiscal más eficiente disponible.",
+      "severidad": "aviso"
+    },
+    {
+      "titulo": "Libre mensual de £1.724 (€2.017): ¡actúalo!",
+      "detalle": "Tienes £1.724 al mes libres tras gastos, pero sin destino definido puede desaparecer en consumo. Automatiza una transferencia mensual a una ISA de ahorro o inversión nada más cobrar.",
+      "severidad": "sugerencia"
+    },
+    {
+      "titulo": "Usa tu allowance ISA (£20.000/año)",
+      "detalle": "Puedes depositar hasta £20.000 al año (€23.400) en una Stocks & Shares ISA libres de impuesto sobre ganancias y dividendos. Con tu remanente actual podrías llenarla en unos 12 meses.",
+      "severidad": "sugerencia"
+    },
+    {
+      "titulo": "Alquiler al 34% del neto: ligeramente alto",
+      "detalle": "£1.200/mes (€1.404) representa el 33,9% de tu neto; la regla orientativa es no superar el 30% (£1.061). No es alarmante, pero limita tu capacidad de ahorro; cualquier bajada de alquiler tendría impacto inmediato.",
+      "severidad": "info"
+    },
+    {
+      "titulo": "Fondo de emergencia antes de invertir",
+      "detalle": "Asegúrate de tener entre 3 y 6 meses de gastos esenciales en cuenta de fácil acceso, es decir entre £5.441 y £10.882 (€6.366–€12.732). Solo entonces destina el excedente a inversión a largo plazo.",
+      "severidad": "sugerencia"
+    }
+  ]
+}

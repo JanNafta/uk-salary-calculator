@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>UK Salary Calculator · 2024/25</title>
+  <!-- Favicon emoji inline (sin red, sin 404 en consola). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B7%3C/text%3E%3C/svg%3E" />
+  <!-- Entregable 5: aplica el tema ANTES del primer paint (sin FOUC).
+       Prioridad: parámetro de URL (entregable 6) > localStorage > prefers-color-scheme. -->
+  <script>
+    (function () {
+      var pref = 'auto';
+      try {
+        var raw = localStorage.getItem('ukcalc.v1');
+        if (raw) {
+          var s = JSON.parse(raw);
+          if (s && (s.theme === 'light' || s.theme === 'dark' || s.theme === 'auto')) pref = s.theme;
+        }
+      } catch (e) { /* JSON corrupto/ausente → defaults, sin romper */ }
+      try {
+        var qp = new URLSearchParams(location.search).get('t');
+        if (qp === 'light' || qp === 'dark' || qp === 'auto') pref = qp;
+      } catch (e) { /* sin URLSearchParams → ignora */ }
+      var resolved = pref;
+      if (pref === 'auto') {
+        resolved = (window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      var html = document.documentElement;
+      html.setAttribute('data-theme', resolved);
+      html.setAttribute('data-theme-pref', pref);
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div class="hero-bar">
+        <div class="hero-titles">
+          <div class="hero-badge">GBP → EUR · 2024/25</div>
+          <h1>Calculadora de sueldo UK</h1>
+          <p class="subtitle">Sueldo bruto en libras → neto tras impuestos. Anual y mensual, en GBP y EUR.</p>
+        </div>
+        <div class="theme-toggle" role="radiogroup" aria-label="Tema de color">
+          <button type="button" class="th-btn" data-theme-set="light" role="radio" aria-checked="false" title="Tema claro">☀️</button>
+          <button type="button" class="th-btn" data-theme-set="auto"  role="radio" aria-checked="false" title="Automático (según el sistema)">🌗</button>
+          <button type="button" class="th-btn" data-theme-set="dark"  role="radio" aria-checked="false" title="Tema oscuro">🌙</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel inputs" aria-label="Datos de entrada">
+      <div class="inputs-header">
+        <h2 class="block-title inputs-title">Datos de entrada</h2>
+      </div>
+      <div class="field">
+        <label for="mode">Tipo de entrada</label>
+        <select id="mode" aria-describedby="mode-help">
+          <option value="annual">Anual</option>
+          <option value="monthly">Mensual</option>
+          <option value="hourly">Por hora</option>
+        </select>
+        <small id="mode-help" class="hint">El cálculo fiscal se hace siempre sobre el bruto anual.</small>
+      </div>
+
+      <div class="field">
+        <label for="gross" id="gross-label">Sueldo bruto anual (GBP)</label>
+        <div class="input-wrap">
+          <span class="prefix">£</span>
+          <input id="gross" type="number" min="0" step="100" value="55000" inputmode="decimal"
+                 aria-describedby="gross-error" />
+        </div>
+        <small id="gross-error" class="field-error" role="alert" hidden></small>
+      </div>
+
+      <div class="field hourly-only" id="hpw-field" hidden>
+        <label for="hpw">Horas / semana</label>
+        <div class="input-wrap">
+          <input id="hpw" type="number" min="0.5" max="168" step="0.5" value="37.5" inputmode="decimal" />
+        </div>
+      </div>
+      <div class="field hourly-only" id="wpy-field" hidden>
+        <label for="wpy">Semanas / año</label>
+        <div class="input-wrap">
+          <input id="wpy" type="number" min="1" max="53" step="1" value="52" inputmode="decimal" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="pension">Aportación a pensión (% del bruto)</label>
+        <div class="input-wrap">
+          <input id="pension" type="number" min="0" max="100" step="0.5" value="0" inputmode="decimal" />
+          <span class="prefix suffix">%</span>
+        </div>
+        <small class="hint">Opcional. Reduce la renta sujeta a Income Tax (esquema <em>net pay</em>).</small>
+      </div>
+
+      <div class="field derived" id="derived-field" hidden>
+        <span class="derived-label">Bruto anual calculado</span>
+        <span class="derived-value" id="derived-gross">£0</span>
+      </div>
+
+      <div class="field rate-field">
+        <label>Tasa GBP → EUR <span class="ro-tag">solo lectura</span></label>
+        <div class="rate-display">
+          <span class="rate-value" id="rate-value">—</span>
+          <button type="button" id="rate-refresh" class="btn-refresh" title="Volver a consultar la tasa oficial">Actualizar</button>
+        </div>
+        <small id="rate-status" class="rate-status loading">⏳ Obteniendo tipo de cambio oficial…</small>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Resultados">
+      <h2 class="block-title">Resultados</h2>
+      <div class="cards" id="cards">
+        <div class="card">
+          <span class="card-label">Bruto anual</span>
+          <span class="card-gbp" id="r-gross-gbp">£0</span>
+          <span class="card-eur" id="r-gross-eur">€0</span>
+        </div>
+        <div class="card tax">
+          <span class="card-label">Income Tax</span>
+          <span class="card-gbp" id="r-tax-gbp">£0</span>
+          <span class="card-eur" id="r-tax-eur">€0</span>
+        </div>
+        <div class="card tax">
+          <span class="card-label">National Insurance</span>
+          <span class="card-gbp" id="r-ni-gbp">£0</span>
+          <span class="card-eur" id="r-ni-eur">€0</span>
+        </div>
+        <div class="card pension" id="card-pension" hidden>
+          <span class="card-label">Pensión</span>
+          <span class="card-gbp" id="r-pen-gbp">£0</span>
+          <span class="card-eur" id="r-pen-eur">€0</span>
+        </div>
+        <div class="card net">
+          <span class="card-label">Neto anual</span>
+          <span class="card-gbp" id="r-net-gbp">£0</span>
+          <span class="card-eur" id="r-net-eur">€0</span>
+        </div>
+        <div class="card net">
+          <span class="card-label">Neto mensual</span>
+          <span class="card-gbp" id="r-netm-gbp">£0</span>
+          <span class="card-eur" id="r-netm-eur">€0</span>
+        </div>
+        <div class="card">
+          <span class="card-label">Total gastos (mes)</span>
+          <span class="card-gbp" id="r-exp-gbp">£0</span>
+          <span class="card-eur" id="r-exp-eur">€0</span>
+        </div>
+        <div class="card free">
+          <span class="card-label">Dinero libre (mes)</span>
+          <span class="card-gbp" id="r-free-gbp">£0</span>
+          <span class="card-eur" id="r-free-eur">€0</span>
+        </div>
+      </div>
+
+      <div class="breakdown" aria-label="Desglose del bruto anual">
+        <h2 class="block-title">Desglose del bruto</h2>
+        <div class="chart-row">
+          <div class="donut-wrap" id="donut-wrap">
+            <svg id="donut" class="donut" viewBox="0 0 220 220" role="img"
+                 aria-labelledby="donut-title" aria-describedby="donut-desc">
+              <title id="donut-title">Desglose del sueldo bruto anual</title>
+              <desc id="donut-desc">Introduce un sueldo para ver el desglose.</desc>
+              <g id="donut-segs" class="donut-segs"></g>
+              <g id="donut-center-g" aria-hidden="true">
+                <text id="donut-center" class="donut-center" x="110" y="100"
+                      text-anchor="middle">—</text>
+                <text id="donut-center-eur" class="donut-center-eur" x="110" y="121"
+                      text-anchor="middle"></text>
+                <text id="donut-center-sub" class="donut-center-sub" x="110" y="139"
+                      text-anchor="middle">neto / mes</text>
+              </g>
+            </svg>
+            <div id="donut-tip" class="donut-tip" role="status" aria-live="polite" hidden></div>
+          </div>
+          <ul class="legend" id="legend" aria-label="Leyenda interactiva del desglose"></ul>
+        </div>
+        <p id="donut-sr" class="sr-only" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="panel rate-history" id="rate-history" hidden aria-label="Histórico de la tasa">
+      <h2 class="block-title">Histórico tasa GBP → EUR (90 días)</h2>
+      <div class="history-wrap">
+        <svg id="history-chart" class="history-chart" viewBox="0 0 640 220"
+             preserveAspectRatio="none" role="img"
+             aria-label="Evolución de la tasa GBP a EUR en los últimos 90 días"></svg>
+      </div>
+      <p id="history-note" class="history-note"></p>
+    </section>
+
+    <section class="panel expenses" aria-label="Gastos mensuales">
+      <h2 class="block-title">Gastos mensuales</h2>
+      <form id="exp-form" class="exp-form" autocomplete="off">
+        <div class="field exp-name-field">
+          <label for="exp-name" class="sr-only">Concepto del gasto</label>
+          <input id="exp-name" type="text" placeholder="🏠 Concepto (ej. Alquiler)" required maxlength="60" />
+        </div>
+        <div class="field">
+          <label for="exp-amount" class="sr-only">Importe del gasto</label>
+          <div class="input-wrap small">
+            <span class="prefix" id="exp-prefix">£</span>
+            <input id="exp-amount" type="number" min="0" step="0.01" placeholder="0.00" required inputmode="decimal" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="exp-currency" class="sr-only">Moneda del gasto</label>
+          <select id="exp-currency">
+            <option value="GBP" selected>£ GBP</option>
+            <option value="EUR">€ EUR</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-add">Añadir</button>
+      </form>
+      <small id="exp-error" class="field-error" role="alert" hidden></small>
+      <ul id="exp-list" class="exp-list"></ul>
+      <p id="exp-empty" class="exp-empty">No has añadido gastos todavía. 🍽️ 🚌 🏠</p>
+
+      <!-- SUE-20: segundo rosco. Reparte el NETO mensual entre cada gasto y
+           el dinero disponible. Tarjeta propia, debajo de la lista de gastos,
+           visualmente separada del donut de impuestos. Solo con >=1 gasto. -->
+      <section class="bdg-card" id="bdg-card" aria-label="Reparto de tu presupuesto mensual" hidden>
+        <h3 class="bdg-title">Reparto de tu presupuesto mensual</h3>
+        <p class="bdg-sub">Cómo se reparte tu <strong>neto mensual</strong> entre cada gasto y el dinero disponible.</p>
+        <p id="bdg-warn" class="bdg-warn" role="alert" hidden></p>
+        <div class="chart-row bdg-row">
+          <div class="donut-wrap" id="bdg-donut-wrap">
+            <svg id="bdg-donut" class="donut" viewBox="0 0 220 220" role="img"
+                 aria-labelledby="bdg-donut-title" aria-describedby="bdg-desc">
+              <title id="bdg-donut-title">Reparto del neto mensual: gastos y dinero disponible</title>
+              <desc id="bdg-desc">Añade gastos para ver el reparto.</desc>
+              <g id="bdg-segs" class="donut-segs"></g>
+              <g id="bdg-center-g" aria-hidden="true">
+                <text id="bdg-center" class="donut-center" x="110" y="100"
+                      text-anchor="middle">—</text>
+                <text id="bdg-center-eur" class="donut-center-eur" x="110" y="121"
+                      text-anchor="middle"></text>
+                <text id="bdg-center-sub" class="donut-center-sub" x="110" y="139"
+                      text-anchor="middle">disponible</text>
+              </g>
+            </svg>
+            <div id="bdg-tip" class="donut-tip" role="status" aria-live="polite" hidden></div>
+          </div>
+          <ul class="legend" id="bdg-legend" aria-label="Leyenda del reparto del presupuesto"></ul>
+        </div>
+        <p id="bdg-sr" class="sr-only" aria-live="polite"></p>
+      </section>
+    </section>
+
+    <section class="panel insights-ai" id="insights-ai" aria-label="Insights IA">
+      <h2 class="block-title">Insights IA</h2>
+      <div id="ai-list" class="ai-list" aria-live="polite" hidden></div>
+      <div id="ai-empty" class="ai-empty">
+        <p>Aún no hay análisis. Genera <code>insights.json</code> con la IA de Claude
+           usando tu suscripción (sin API key ni coste extra):</p>
+        <ol class="ai-steps">
+          <li><strong>📤 Exportar datos para IA</strong> → guarda <code>finance.json</code> junto a <code>index.html</code>.</li>
+          <li>En una terminal, en esa carpeta: <code class="ai-cmd">node ai-insights.mjs finance.json</code></li>
+          <li>Recarga la página (o <strong>🔄 Recargar insights</strong>): aparecerán aquí.</li>
+        </ol>
+        <p class="ai-alt">¿Sin terminal? <strong>📋 Copiar prompt para Claude</strong>, pégalo en Claude
+           y guarda su respuesta como <code>insights.json</code> en esta carpeta.</p>
+      </div>
+      <div class="ai-actions">
+        <button type="button" id="btn-ai-export" class="btn-action">Exportar datos para IA</button>
+        <button type="button" id="btn-ai-prompt" class="btn-action">Copiar prompt para Claude</button>
+        <button type="button" id="btn-ai-reload" class="btn-action">Recargar insights</button>
+      </div>
+      <p id="ai-status" class="ai-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="panel actions" aria-label="Acciones">
+      <button type="button" id="btn-print" class="btn-action">Resumen imprimible</button>
+      <button type="button" id="btn-share" class="btn-action">Copiar enlace</button>
+      <button type="button" id="btn-clear" class="btn-action danger">Borrar datos guardados</button>
+      <span id="action-msg" class="action-msg" role="status" aria-live="polite"></span>
+    </section>
+
+    <footer class="foot">
+      <p>Cálculo orientativo · Inglaterra 2024/25 · No constituye asesoramiento fiscal.</p>
+    </footer>
+  </main>
+
+  <!-- Entregable 3: resumen imprimible tipo payslip (solo visible al imprimir). -->
+  <section class="payslip" id="payslip" aria-hidden="true">
+    <h1 class="ps-title">Resumen de nómina · Reino Unido 2024/25</h1>
+    <p class="ps-sub" id="ps-date"></p>
+    <div class="ps-chart" id="ps-chart" aria-hidden="true"></div>
+    <table class="ps-table">
+      <tbody>
+        <tr><th>Bruto anual</th><td id="ps-gross-gbp"></td><td id="ps-gross-eur"></td></tr>
+        <tr><th>Income Tax</th><td id="ps-tax-gbp"></td><td id="ps-tax-eur"></td></tr>
+        <tr><th>National Insurance</th><td id="ps-ni-gbp"></td><td id="ps-ni-eur"></td></tr>
+        <tr id="ps-pen-row"><th>Pensión</th><td id="ps-pen-gbp"></td><td id="ps-pen-eur"></td></tr>
+        <tr class="ps-strong"><th>Neto anual</th><td id="ps-net-gbp"></td><td id="ps-net-eur"></td></tr>
+        <tr class="ps-strong"><th>Neto mensual</th><td id="ps-netm-gbp"></td><td id="ps-netm-eur"></td></tr>
+        <tr><th>Total gastos (mes)</th><td id="ps-exp-gbp"></td><td id="ps-exp-eur"></td></tr>
+        <tr class="ps-strong"><th>Dinero libre (mes)</th><td id="ps-free-gbp"></td><td id="ps-free-eur"></td></tr>
+      </tbody>
+    </table>
+    <div class="ps-budget" id="ps-budget" aria-hidden="true"></div>
+    <p class="ps-foot" id="ps-rate"></p>
+    <p class="ps-foot">Cálculo orientativo. No constituye asesoramiento fiscal.</p>
+  </section>
+
+  <!-- Bloque C: contenedor de toasts animados (aria-live, no roba foco). -->
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
