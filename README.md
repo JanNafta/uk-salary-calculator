@@ -1,23 +1,88 @@
-# 💷 → 💶 Calculadora de sueldo UK → €
+# 💷 → 💶 Calculadora de sueldo UK & Gibraltar → €
 
 Web app de una sola página (HTML + CSS + JavaScript vanilla, **sin frameworks, sin
 build, sin CDN, sin dependencias**). Funciona abriendo `index.html` directamente
 (`file://`), sin internet (salvo los entregables de red, que degradan sin romper).
+Calcula el neto en **dos jurisdicciones**: **Gibraltar (GIBS 2025/26)** — la opción
+por defecto — y **Reino Unido (PAYE Inglaterra 2026/27)**, con un comparador en vivo.
 
 ## Uso
 
 1. Abre `index.html` en cualquier navegador moderno (doble clic).
-2. Elige el **modo de entrada** (Anual / Mensual / Por hora) e introduce tu sueldo bruto.
-3. La **tasa GBP → EUR** se obtiene **automáticamente** de fuente oficial (solo lectura).
-4. Añade tus **gastos mensuales** (nombre + importe + moneda £/€).
-5. Usa el **toggle ☀️🌗🌙** para cambiar entre tema claro, automático y oscuro.
+2. Elige la **jurisdicción fiscal**: 🇬🇮 Gibraltar (GIBS) o 🇬🇧 Reino Unido.
+3. Elige el **modo de entrada** (Anual / Mensual / Por hora) e introduce tu sueldo bruto.
+4. La **tasa GBP → EUR** se obtiene **automáticamente** de fuente oficial (solo lectura).
+5. Añade tus **gastos mensuales** (nombre + importe + moneda £/€).
+6. Usa el **toggle ☀️🌗🌙** para cambiar entre tema claro, automático y oscuro.
 
 Todo se **recalcula en el acto** al cambiar cualquier entrada.
+
+## Modo Gibraltar (GIBS) — jurisdicción por defecto
+
+Sistema **Gross Income Based (GIBS)**, año fiscal 2025/26 (1-jul-2025 a
+30-jun-2026; el Budget 2026 del 7-jul-2026 no cambió el income tax, así que
+sigue vigente en 2026/27). Constantes en `GIB_CONFIG` (`app.js`).
+
+**Impuesto (GIBS) — sin personal allowance** (se tributa desde la primera libra):
+
+| Assessable income > £25.000 | Tipo | | Assessable income ≤ £25.000 | Tipo |
+|---|---|---|---|---|
+| First £17,000 | 16% | | First £10,000 | 6% |
+| £17,001 – £25,000 | 19% | | £10,001 – £17,000 | 20% |
+| £25,001 – £40,000 | 25% | | Balance | 28% |
+| £40,001 – £105,000 | 28% | | | |
+| Balance (> £105,000) | 25% | | | |
+
+**Social Insurance (empleado, clase ER, <60 años):** 10% del bruto con suelo
+**£62,11/mes** y techo **£176,76/mes** (tabla oficial WEF 01/07/2025). No se
+reduce por la pensión.
+
+**Pensión bajo GIBS:** la aportación del empleado a approved pension schemes
+reduce la renta sujeta al impuesto con un **máximo deducible de £1.500/año**
+(EY Tax Facts 2025/26); la aportación completa sí sale del neto.
+
+Fuentes: Income Tax Office (leaflet oficial de bandas), tabla oficial de Social
+Insurance WEF 01/07/2025 (gibraltar.gov.gi), EY Tax Facts 2025/26, PwC WWTS.
+
+### Ejemplo verificado — Gibraltar, £55.000 bruto anual
+
+Contrastado contra **una nómina real de Gibraltar (jul 2026, tax code GIB)**,
+sin datos personales:
+
+| Concepto | Anual | Mensual |
+|---:|---:|---:|
+| Bruto | £55.000,00 | £4.583,33 |
+| Impuesto (GIBS) | £12.190,00 | £1.015,83 |
+| Social Insurance | £2.121,12 | £176,76 |
+| **Neto** | **£40.688,88** | **£3.390,74** |
+
+Detalle del impuesto: 17.000×16% + 8.000×19% + 15.000×25% + 15.000×28% =
+2.720 + 1.520 + 3.750 + 4.200 = **£12.190/año**. SI: 10% × £4.583,33 = £458,33
+→ capado al máximo oficial **£176,76/mes**.
+
+> **Nota de redondeo:** la nómina real muestra £1.015,88 de impuesto y £3.390,69
+> de neto mensual (dif. **±£0,05/mes**) por el redondeo de las tablas PAYE del
+> software del empleador. La app calcula el valor exacto y **no** emula ese
+> redondeo; cuando la jurisdicción es Gibraltar y el bruto anual es exactamente
+> £55.000, muestra un **chip de verificación** con esta nota.
+
+## Comparador UK ↔ Gibraltar
+
+Bajo el desglose del bruto, una tarjeta muestra **para el mismo bruto (y misma
+pensión)** el neto anual y mensual en ambas jurisdicciones, resalta en **verde
+la ganadora** y destaca la **delta mensual** (ej.: con £55.000, en UK cobrarías
+£147,38/mes más que en Gibraltar). Reactivo en vivo, accesible (`aria-live`),
+presente en ambos temas y como línea en el resumen imprimible.
+
+La jurisdicción elegida se **persiste** en `localStorage` (`ukcalc.v1`, campo
+`jur`, default `GIB` — retrocompatible con estados guardados antiguos) y se
+**serializa en el enlace compartible** (parámetro `?j=GIB|UK`; la URL tiene
+prioridad sobre localStorage).
 
 ## Nuevas features (SUE-8 — Visual/UX)
 
 ### Entregable 1 — Gráfico del desglose
-- Gráfico donut en SVG vanilla con segmentos: **Neto**, **Income Tax**, **NI** y **Pensión** (si aplica).
+- Gráfico donut en SVG vanilla con segmentos: **Neto**, **impuesto**, **NI/SI** y **Pensión** (si aplica). Las etiquetas son dinámicas por jurisdicción (UK: *Income Tax* / *National Insurance* · GIB: *Impuesto (GIBS)* / *Social Insurance*).
 - Leyenda con etiqueta, importe en GBP y porcentaje; colores coherentes con el tema activo.
 - Se redibuja al recalcular y al cambiar el tamaño de la ventana.
 
@@ -143,14 +208,18 @@ guarda su respuesta como `insights.json`.
 - El total de gastos y el dinero libre se calculan normalizando a GBP base.
 - Un gasto sin moneda explícita se trata como £ GBP (compatibilidad con datos existentes).
 
-## Cálculo de impuestos (Inglaterra, año fiscal 2024/25)
+## Cálculo de impuestos (Inglaterra, año fiscal 2026/27)
 
-Constantes editables al inicio de `app.js` (`TAX_CONFIG`):
+Constantes editables al inicio de `app.js` (`TAX_CONFIG`). Tras el Autumn
+Budget de nov-2025, los parámetros del empleado estándar quedan **congelados
+hasta abril 2031** (idénticos a 2024/25):
 
 - **Personal Allowance:** £12.570 al 0%; se reduce £1 por cada £2 de ingreso > £100.000 (cero a partir de £125.140).
 - **Income Tax:** 20% de £12.571–£50.270 · 40% de £50.271–£125.140 · 45% por encima.
 - **National Insurance (Class 1):** 8% entre £12.570 y £50.270 · 2% por encima. La pensión no reduce la base de NI.
 - **Pensión (net pay):** el porcentaje introducido reduce la renta sujeta a Income Tax (no a NI).
+
+Fuente: gov.uk "Rates and thresholds for employers 2026 to 2027".
 
 ## Tasa de cambio GBP → EUR
 
@@ -166,7 +235,7 @@ Automática, solo lectura. Cascada de obtención:
 
 Cada fuente tiene timeout corto (~3,5 s) y `try/catch` silencioso.
 
-## Ejemplo verificado (£55.000 bruto anual, tasa 1,17)
+## Ejemplo UK (£55.000 bruto anual, tasa 1,17)
 
 | Concepto            | GBP          | EUR (×1,17)  |
 |--------------------:|-------------:|-------------:|
@@ -177,6 +246,9 @@ Cada fuente tiene timeout corto (~3,5 s) y `try/catch` silencioso.
 | **Neto mensual**    | **£3.538,12**  | **€4.140**  |
 
 Detalle: IT = 20% × £37.700 + 40% × £4.730 = £7.540 + £1.892 = **£9.432** | NI = 8% × £37.700 + 2% × £4.730 = £3.016 + £94,60 = **£3.110,60**
+
+Con el mismo bruto, el comparador muestra: **UK £3.538,12/mes vs Gibraltar
+£3.390,74/mes → +£147,38/mes a favor de UK**.
 
 ## Sistema de diseño PREMIUM (SUE-17)
 

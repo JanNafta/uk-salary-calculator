@@ -83,9 +83,11 @@ function loadFinance() {
 function buildPrompt(fin) {
   const rate = (fin.currency && fin.currency.gbpToEur) || '?';
   const taxYear = fin.taxYear || '2024/25';
+  // finance.json antiguos (sin "jurisdiction") eran siempre de Reino Unido.
+  const where = fin.jurisdiction === 'GIB' ? 'Gibraltar (sistema GIBS)' : 'Reino Unido';
   return [
-    'Eres un asesor financiero personal. Analiza este resumen de nómina del',
-    'Reino Unido (año fiscal ' + taxYear + ') con sus gastos mensuales.',
+    'Eres un asesor financiero personal. Analiza este resumen de nómina de',
+    where + ' (año fiscal ' + taxYear + ') con sus gastos mensuales.',
     'Responde EXCLUSIVAMENTE con un array JSON de entre 4 y 7 objetos, sin',
     'texto adicional ni markdown ni explicación. Cada objeto debe ser:',
     '{"titulo": string breve, "detalle": string accionable de 1-2 frases,',

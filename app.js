@@ -1,9 +1,12 @@
 'use strict';
 
 /* =========================================================================
- *  CONSTANTES FISCALES EDITABLES — Inglaterra, año fiscal 2024/25
+ *  CONSTANTES FISCALES EDITABLES — Inglaterra, año fiscal 2026/27
+ *  (6-abr-2026 a 5-abr-2027; tras el Autumn Budget nov-2025 los parámetros
+ *  del empleado estándar quedan CONGELADOS hasta abril 2031: mismos valores
+ *  que 2024/25. Fuente: gov.uk "Rates and thresholds for employers 2026-27".)
  *  Cambia estos valores para actualizar el cálculo a otro año/región.
- *  (SUE-1..SUE-7 — sin cambios: el ejemplo £55.000 sigue verificado.)
+ *  (SUE-1..SUE-7 — sin cambios numéricos: el ejemplo £55.000 sigue verificado.)
  * ========================================================================= */
 const TAX_CONFIG = {
   personalAllowance: 12570,        // Tramo libre de impuestos (0%)
@@ -16,7 +19,7 @@ const TAX_CONFIG = {
   basicRate:        { rate: 0.20, bandWidth: 50270 - 12570 }, // £37.700 de renta imponible al 20%
   higherRate:       { rate: 0.40 },
   additionalRate:   { rate: 0.45, incomeThreshold: 125140 },
-  // National Insurance — empleado, Class 1
+  // National Insurance — empleado, Class 1 (8% PT→UEL, 2% encima; sin cambios)
   ni: {
     primaryThreshold: 12570,       // No se paga NI por debajo de este sueldo
     upperEarningsLimit: 50270,     // Cambio de tipo principal a tipo reducido
@@ -24,6 +27,79 @@ const TAX_CONFIG = {
     upperRate: 0.02,               // 2% por encima del upperEarningsLimit
   },
 };
+
+/* =========================================================================
+ *  CONSTANTES FISCALES — GIBRALTAR, Gross Income Based System (GIBS)
+ *  Año fiscal 2025/26 (1-jul-2025 a 30-jun-2026); el Budget 2026 (7-jul-2026)
+ *  NO cambió el income tax, así que sigue vigente en 2026/27.
+ *  Fuentes: Income Tax Office (leaflet oficial de bandas), tabla oficial
+ *  "Social Insurance Contribution Class WEF 01/07/2025" (gibraltar.gov.gi),
+ *  EY Tax Facts 2025/26 y PwC Worldwide Tax Summaries.
+ *  En GIBS NO hay personal allowance: se tributa desde la primera libra.
+ * ========================================================================= */
+const GIB_CONFIG = {
+  // Escala para assessable income > £25.000 ("balance @ 25%" por encima
+  // de £105.000 según todas las fuentes vigentes 2024/25–2026/27).
+  bandsHigh: [
+    { width: 17000,    rate: 0.16 },   // first £17,000 @ 16%
+    { width: 8000,     rate: 0.19 },   // next  £8,000  @ 19%
+    { width: 15000,    rate: 0.25 },   // next  £15,000 @ 25%
+    { width: 65000,    rate: 0.28 },   // next  £65,000 @ 28% (£40.001–£105.000)
+    { width: Infinity, rate: 0.25 },   // balance @ 25%
+  ],
+  // Escala para assessable income ≤ £25.000.
+  bandsLow: [
+    { width: 10000,    rate: 0.06 },   // first £10,000 @ 6%
+    { width: 7000,     rate: 0.20 },   // next  £7,000  @ 20%
+    { width: Infinity, rate: 0.28 },   // balance @ 28%
+  ],
+  lowScaleMax: 25000,                  // hasta aquí aplica la escala reducida
+  // Social Insurance del EMPLEADO (clase ER, <60 años): 10% del bruto con
+  // suelo y techo MENSUALES oficiales. £40,79/semana × 52 ÷ 12 = £176,76/mes.
+  si: {
+    rate: 0.10,
+    monthlyMin: 62.11,                 // mínimo mensual oficial
+    monthlyMax: 176.76,                // máximo mensual oficial (cap efectivo)
+  },
+  // Deducción máxima anual por aportaciones del empleado a approved pension
+  // schemes bajo GIBS (EY 2025/26). Limita cuánto reduce la pensión la base
+  // del impuesto; la aportación completa sí sale del neto.
+  pensionDeductionCap: 1500,
+};
+
+/* Etiquetas y metadatos por jurisdicción (tarjetas, donut, payslip, hero). */
+const JUR_META = {
+  GIB: {
+    key: 'GIB',
+    name: 'Gibraltar',
+    flag: '🇬🇮',
+    year: '2025/26',
+    taxLabel: 'Impuesto (GIBS)',
+    niLabel: 'Social Insurance',
+    badge: 'GBP → EUR · Gibraltar 2025/26',
+    psTitle: 'Resumen de nómina · Gibraltar 2025/26',
+    region: 'Gibraltar (GIBS)',
+    jurHint: 'GIBS: sin personal allowance, se tributa desde la primera libra. SI 10% con tope £176,76/mes.',
+    pensionHint: 'Opcional. Reduce la renta sujeta al impuesto GIBS (deducción máx. £1.500/año). No reduce la base de Social Insurance.',
+  },
+  UK: {
+    key: 'UK',
+    name: 'Reino Unido',
+    flag: '🇬🇧',
+    year: '2026/27',
+    taxLabel: 'Income Tax',
+    niLabel: 'National Insurance',
+    badge: 'GBP → EUR · UK 2026/27',
+    psTitle: 'Resumen de nómina · Reino Unido 2026/27',
+    region: 'Inglaterra',
+    jurHint: 'PAYE Inglaterra: personal allowance £12.570 (0%), luego 20% / 40% / 45% + National Insurance.',
+    pensionHint: 'Opcional. Reduce la renta sujeta a Income Tax (esquema net pay). No reduce la base de NI.',
+  },
+};
+
+// Metadatos de la jurisdicción ACTIVA (STATE.jur se define más abajo; esta
+// función solo se invoca en runtime, cuando el estado ya existe).
+function jurMeta() { return JUR_META[STATE.jur] || JUR_META.GIB; }
 
 /* =========================================================================
  *  TIPO DE CAMBIO GBP → EUR — AUTOMÁTICO, SOLO LECTURA
@@ -95,6 +171,63 @@ function nationalInsurance(gross) {
   return ni;
 }
 
+/* ==================== CÁLCULO DE IMPUESTOS — GIBRALTAR ==================== */
+
+// Impuesto GIBS sobre el assessable income anual. Dos escalas oficiales:
+// reducida hasta £25.000 y estándar por encima (en £25.000 exactos ambas
+// coinciden: £4.240). Sin personal allowance: tributa desde la primera libra.
+// La ESCALA se elige por el GROSS assessable income (EY Tax Facts 2025/26)
+// aunque las bandas se apliquen a la base ya minorada por deducciones;
+// `scaleIncome` permite pasar ese bruto (por defecto, la propia base).
+function gibIncomeTax(taxable, scaleIncome) {
+  if (!(taxable > 0)) return 0;
+  const forScale = Number.isFinite(scaleIncome) ? scaleIncome : taxable;
+  const bands = forScale > GIB_CONFIG.lowScaleMax
+    ? GIB_CONFIG.bandsHigh : GIB_CONFIG.bandsLow;
+  let tax = 0;
+  let remaining = taxable;
+  for (const b of bands) {
+    const slice = Math.min(remaining, b.width);
+    tax += slice * b.rate;
+    remaining -= slice;
+    if (remaining <= 0) break;
+  }
+  return tax;
+}
+
+// Social Insurance del empleado (Gibraltar, clase ER): 10% del bruto MENSUAL
+// con suelo £62,11 y techo £176,76 al mes (tabla oficial WEF 01/07/2025).
+// Devuelve el importe ANUAL. Verificado contra nómina real: £55.000/año →
+// £176,76/mes = £2.121,12/año (exacto al penique).
+function gibSocialInsurance(grossAnnual) {
+  if (!(grossAnnual > 0)) return 0;
+  const { rate, monthlyMin, monthlyMax } = GIB_CONFIG.si;
+  const monthly = Math.min(Math.max((grossAnnual / 12) * rate, monthlyMin), monthlyMax);
+  return monthly * 12;
+}
+
+/* Motor unificado: bruto anual + % pensión + jurisdicción → deducciones y
+ * neto. Función PURA (la usan render(), el comparador UK↔GIB, el payslip y
+ * el export de finanzas). La pensión (esquema net pay) reduce la renta
+ * sujeta a income tax en ambas jurisdicciones — en GIBS con el tope oficial
+ * de £1.500/año deducibles — y NUNCA la base de NI/SI. */
+function computeNet(grossAnnual, pensionPct, jur) {
+  const gross = Number.isFinite(grossAnnual) && grossAnnual > 0 ? grossAnnual : 0;
+  const pct = Math.min(100, Math.max(0, Number.isFinite(pensionPct) ? pensionPct : 0));
+  const pensionAmount = gross * (pct / 100);
+  let tax, ni;
+  if (jur === 'GIB') {
+    const deductible = Math.min(pensionAmount, GIB_CONFIG.pensionDeductionCap);
+    tax = gibIncomeTax(Math.max(0, gross - deductible), gross);
+    ni = gibSocialInsurance(gross);              // SI sobre bruto completo
+  } else {
+    tax = incomeTax(Math.max(0, gross - pensionAmount));
+    ni = nationalInsurance(gross);               // NI sobre bruto completo
+  }
+  const netAnnual = Math.max(0, gross - pensionAmount - tax - ni);
+  return { pensionAmount, tax, ni, netAnnual, netMonthly: netAnnual / 12 };
+}
+
 /* ============================== FORMATO ================================= */
 
 const fmtGBP = new Intl.NumberFormat('en-GB', {
@@ -121,6 +254,8 @@ const DEFAULTS = {
   hpw: 37.5,             // horas / semana (modo por hora)
   wpy: 52,               // semanas / año  (modo por hora)
   pension: 0,            // % del bruto destinado a pensión
+  jur: 'GIB',            // jurisdicción fiscal: 'GIB' | 'UK' (default Gibraltar;
+                         // estados guardados sin este campo → 'GIB', retrocompatible)
   theme: 'auto',         // 'light' | 'dark' | 'auto'
   expenses: [],          // [{ id, name, amount, currency }]
 };
@@ -160,6 +295,7 @@ function persist() {
         hpw: STATE.hpw,
         wpy: STATE.wpy,
         pension: STATE.pension,
+        jur: STATE.jur,
         theme: STATE.theme,
         expenses: STATE.expenses,
       }));
@@ -181,6 +317,13 @@ function readUrlState() {
   if (q.has('hpw')) { const v = parseFloat(q.get('hpw')); if (Number.isFinite(v) && v > 0) out.hpw = v; }
   if (q.has('wpy')) { const v = parseFloat(q.get('wpy')); if (Number.isFinite(v) && v > 0) out.wpy = v; }
   if (q.has('p'))   { const v = parseFloat(q.get('p'));   if (Number.isFinite(v) && v >= 0) out.pension = Math.min(100, v); }
+  const j = q.get('j');                          // jurisdicción fiscal
+  if (j === 'GIB' || j === 'UK') out.jur = j;
+  // Enlaces compartidos ANTERIORES al modo Gibraltar: llevan estado fiscal
+  // ('g' siempre presente en buildShareUrl) pero no 'j'. Se generaron cuando
+  // solo existía UK → se abren en UK para que quien los reciba vea las
+  // mismas cifras que vio quien compartió.
+  else if (q.has('g')) out.jur = 'UK';
   const t = q.get('t');
   if (t === 'light' || t === 'dark' || t === 'auto') out.theme = t;
   if (q.has('e')) {
@@ -207,6 +350,7 @@ function buildShareUrl() {
   q.set('m', STATE.mode);
   if (STATE.mode === 'hourly') { q.set('hpw', String(STATE.hpw)); q.set('wpy', String(STATE.wpy)); }
   if (STATE.pension > 0) q.set('p', String(STATE.pension));
+  q.set('j', STATE.jur);                         // jurisdicción fiscal
   q.set('t', STATE.theme);
   if (STATE.expenses.length) {
     q.set('e', JSON.stringify(STATE.expenses.map((x) => ({
@@ -296,13 +440,12 @@ function render() {
   );
 
   const rate = fxRate;
-  const pensionAmount = gross * (Math.min(100, Math.max(0, STATE.pension)) / 100);
-  const grossForTax = Math.max(0, gross - pensionAmount); // esquema net pay
-
-  const tax = incomeTax(grossForTax);
-  const ni = nationalInsurance(gross);                    // NI sobre bruto completo
-  const netAnnual = Math.max(0, gross - pensionAmount - tax - ni);
-  const netMonthly = netAnnual / 12;
+  // Motor unificado por jurisdicción (GIBS/UK): pensión net pay, SI/NI sobre
+  // el bruto completo. Se computan AMBAS jurisdicciones para el comparador.
+  const resGib = computeNet(gross, STATE.pension, 'GIB');
+  const resUk = computeNet(gross, STATE.pension, 'UK');
+  const res = STATE.jur === 'GIB' ? resGib : resUk;
+  const { pensionAmount, tax, ni, netAnnual, netMonthly } = res;
 
   const expTotal = STATE.expenses.reduce((s, e) => s + expenseInGBP(e, rate), 0);
   const freeMonthly = netMonthly - expTotal;
@@ -363,7 +506,60 @@ function render() {
     }
   }
 
-  fillPayslip({ gross, tax, ni, pensionAmount, netAnnual, netMonthly, expTotal, freeMonthly, rate });
+  // Comparador UK ↔ Gibraltar (mismo bruto y pensión) + chip de verificación
+  // contra nómina real (solo GIB con bruto anual derivado exacto de £55.000).
+  updateCompare(gross, resUk, resGib, rate);
+  const chip = $('verify-chip');
+  if (chip) chip.hidden = !(STATE.jur === 'GIB' && Math.abs(gross - 55000) < 0.005);
+
+  fillPayslip({ gross, tax, ni, pensionAmount, netAnnual, netMonthly, expTotal, freeMonthly, rate, resUk, resGib });
+}
+
+/* --------------- Comparador UK ↔ Gibraltar (mismo bruto) ---------------- *
+ *  Muestra lado a lado el neto anual/mensual en ambas jurisdicciones y la
+ *  delta mensual destacada; la jurisdicción ganadora se colorea en verde.
+ *  Reactivo en vivo (se llama desde render()) y reflejado en el payslip.
+ * ----------------------------------------------------------------------- */
+function updateCompare(gross, resUk, resGib, rate) {
+  const box = $('compare');
+  if (!box) return;
+  if (!(gross > 0)) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const tg = (id, v) => tweenNumber($(id), v, (x) => fmtGBP.format(x));
+  tg('cmp-gib-m', resGib.netMonthly);
+  tg('cmp-gib-y', resGib.netAnnual);
+  tg('cmp-uk-m', resUk.netMonthly);
+  tg('cmp-uk-y', resUk.netAnnual);
+
+  const dm = resGib.netMonthly - resUk.netMonthly;   // >0 → gana Gibraltar
+  const colGib = $('cmp-col-gib');
+  const colUk = $('cmp-col-uk');
+  const tie = Math.abs(dm) < 0.005;
+  if (colGib) colGib.classList.toggle('is-winner', !tie && dm > 0);
+  if (colUk) colUk.classList.toggle('is-winner', !tie && dm < 0);
+
+  const delta = $('cmp-delta');
+  if (!delta) return;
+  delta.classList.toggle('is-tie', tie);
+  if (tie) {
+    delta.textContent = 'Con este bruto cobrarías prácticamente lo mismo en ambas jurisdicciones.';
+    return;
+  }
+  const winner = dm > 0 ? 'Gibraltar' : 'UK';
+  const loser = dm > 0 ? 'UK' : 'Gibraltar';
+  const absM = Math.abs(dm);
+  delta.innerHTML = '';
+  delta.append('Con este bruto, en ');
+  const w = document.createElement('strong');
+  w.className = 'cmp-winner';
+  w.textContent = winner;
+  delta.append(w, ' cobrarías ');
+  const amt = document.createElement('strong');
+  amt.className = 'cmp-winner';
+  amt.textContent = fmtGBP2.format(absM) + '/mes';
+  delta.append(amt, ' más que en ' + loser + ' (' +
+    fmtGBP.format(absM * 12) + '/año).');
 }
 
 /* ------------------- Bloque A: donut interactivo ----------------------- *
@@ -375,7 +571,9 @@ function render() {
 const SVGNS = 'http://www.w3.org/2000/svg';
 const DONUT_CX = 110, DONUT_CY = 110;
 const DONUT_RO = 96, DONUT_RI = 60;          // radios exterior / interior
-// Config del rosco de impuestos (reparte el BRUTO anual).
+// Config del rosco de impuestos (reparte el BRUTO anual). Los nombres de
+// "tax"/"ni" son dinámicos por jurisdicción (Income Tax/NI en UK, Impuesto
+// GIBS/Social Insurance en Gibraltar): se resuelven en drawDonut().
 const DONUT_SEGS = [
   { key: 'net',     name: 'Neto',        color: 'var(--net)' },
   { key: 'tax',     name: 'Income Tax',  color: 'var(--tax)' },
@@ -662,6 +860,9 @@ function drawDonut(d) {
     });
     return;
   }
+  // Etiquetas dinámicas por jurisdicción (leyenda, tooltip, aria del donut).
+  const jm = jurMeta();
+  const segName = { net: 'Neto', tax: jm.taxLabel, ni: jm.niLabel, pension: 'Pensión' };
   renderDonut(taxDonut, {
     empty: false,
     center: {
@@ -672,7 +873,7 @@ function drawDonut(d) {
     total,
     rate: d.rate,
     segs: DONUT_SEGS.map((s) => ({
-      key: s.key, name: s.name, color: s.color,
+      key: s.key, name: segName[s.key] || s.name, color: s.color,
       value: Math.max(0, ({ net: d.net, tax: d.tax, ni: d.ni, pension: d.pension })[s.key] || 0),
     })),
     pctSuffix: 'del bruto',
@@ -776,6 +977,11 @@ function drawBudgetDonut(d) {
 function fillPayslip(d) {
   const g = (v) => fmtGBP2.format(v);
   const e = (v) => fmtEUR2.format(v * d.rate);
+  // Título y etiquetas del payslip según la jurisdicción activa.
+  const jm = jurMeta();
+  $('ps-title').textContent = jm.psTitle;
+  $('ps-tax-th').textContent = jm.taxLabel;
+  $('ps-ni-th').textContent = jm.niLabel;
   $('ps-date').textContent = 'Generado el ' +
     new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
   $('ps-gross-gbp').textContent = g(d.gross);   $('ps-gross-eur').textContent = e(d.gross);
@@ -793,6 +999,24 @@ function fillPayslip(d) {
   $('ps-netm-gbp').textContent = g(d.netMonthly); $('ps-netm-eur').textContent = e(d.netMonthly);
   $('ps-exp-gbp').textContent = g(d.expTotal);    $('ps-exp-eur').textContent = e(d.expTotal);
   $('ps-free-gbp').textContent = g(d.freeMonthly); $('ps-free-eur').textContent = e(d.freeMonthly);
+  // Línea del comparador UK ↔ Gibraltar en el resumen imprimible.
+  const cmp = $('ps-compare');
+  if (cmp) {
+    if (d.gross > 0 && d.resUk && d.resGib) {
+      const dm = d.resGib.netMonthly - d.resUk.netMonthly;
+      if (Math.abs(dm) < 0.005) {
+        cmp.textContent = 'Comparador UK ↔ Gibraltar: mismo neto mensual en ambas (' +
+          g(d.resGib.netMonthly) + ').';
+      } else {
+        const winner = dm > 0 ? 'Gibraltar' : 'UK';
+        cmp.textContent = 'Comparador UK ↔ Gibraltar: neto/mes Gibraltar ' +
+          g(d.resGib.netMonthly) + ' · UK ' + g(d.resUk.netMonthly) +
+          ' → ' + fmtGBP2.format(Math.abs(dm)) + '/mes a favor de ' + winner + '.';
+      }
+    } else {
+      cmp.textContent = '';
+    }
+  }
   $('ps-rate').textContent = elRateStatus.textContent.replace(/^[^A-Za-zÁÉÍÓÚ]+/, '') +
     ' · 1 £ = ' + d.rate.toFixed(4) + ' €';
 }
@@ -981,12 +1205,9 @@ function currentFinance() {
   const gross = annualGross();
   const rate = fxRate;
   const pension = Math.min(100, Math.max(0, STATE.pension));
-  const pensionAmount = gross * (pension / 100);
-  const grossForTax = Math.max(0, gross - pensionAmount);
-  const tax = incomeTax(grossForTax);
-  const ni = nationalInsurance(gross);
-  const netAnnual = Math.max(0, gross - pensionAmount - tax - ni);
-  const netMonthly = netAnnual / 12;
+  // Motor unificado (GIBS/UK): mismas cifras que la web y el payslip.
+  const res = computeNet(gross, pension, STATE.jur);
+  const jm = jurMeta();
   const r2 = (n) => Math.round(n * 100) / 100;
   const expenses = STATE.expenses.map((e) => ({
     name: e.name,
@@ -998,26 +1219,30 @@ function currentFinance() {
   return {
     schema: 'uk-salary-calculator/finance@1',
     generatedAt: new Date().toISOString(),
-    taxYear: '2024/25',
-    region: 'Inglaterra',
+    jurisdiction: STATE.jur,           // 'GIB' (Gibraltar GIBS) | 'UK' (PAYE)
+    taxYear: jm.year,
+    region: jm.region,
     currency: { base: 'GBP', quote: 'EUR', gbpToEur: r2(rate) },
     mode: STATE.mode,
     gross: { annual: r2(gross), monthly: r2(gross / 12) },
-    pension: { pct: pension, annual: r2(pensionAmount) },
-    incomeTax: { annual: r2(tax) },
-    nationalInsurance: { annual: r2(ni) },
-    net: { annual: r2(netAnnual), monthly: r2(netMonthly) },
+    pension: { pct: pension, annual: r2(res.pensionAmount) },
+    incomeTax: { annual: r2(res.tax), label: jm.taxLabel },
+    // En GIB este campo es la Social Insurance (10% capado); el "label"
+    // desambigua para la IA sin romper el esquema finance@1 (aditivo).
+    nationalInsurance: { annual: r2(res.ni), label: jm.niLabel },
+    net: { annual: r2(res.netAnnual), monthly: r2(res.netMonthly) },
     expensesMonthly: expenses,
     expensesMonthlyTotalGbp: r2(expTotal),
-    freeMonthlyGbp: r2(netMonthly - expTotal),
+    freeMonthlyGbp: r2(res.netMonthly - expTotal),
   };
 }
 
 // Mismo texto que ai-insights.mjs (mantener sincronizados si se edita).
 function aiPrompt(fin) {
+  const where = fin.jurisdiction === 'GIB' ? 'Gibraltar (sistema GIBS)' : 'Reino Unido';
   return [
-    'Eres un asesor financiero personal. Analiza este resumen de nómina del',
-    'Reino Unido (año fiscal ' + fin.taxYear + ') con sus gastos mensuales.',
+    'Eres un asesor financiero personal. Analiza este resumen de nómina de',
+    where + ' (año fiscal ' + fin.taxYear + ') con sus gastos mensuales.',
     'Responde EXCLUSIVAMENTE con un array JSON de entre 4 y 7 objetos, sin',
     'texto adicional ni markdown ni explicación. Cada objeto debe ser:',
     '{"titulo": string breve, "detalle": string accionable de 1-2 frases,',
@@ -1471,6 +1696,50 @@ if (mqDark && mqDark.addEventListener) {
 
 /* ============================== EVENTOS ================================ */
 
+/* --------- Selector de jurisdicción (Gibraltar/UK) — segmentado ---------- *
+ *  Radiogroup accesible con roving tabindex y flechas de teclado. Cambiarlo
+ *  re-etiqueta toda la web (tarjetas, donut, payslip, hints) y recalcula.
+ * ----------------------------------------------------------------------- */
+const elJurBtns = Array.prototype.slice.call(
+  document.querySelectorAll('.seg-btn[data-jur]'));
+
+function syncJurUI() {
+  const m = jurMeta();
+  for (const b of elJurBtns) {
+    const on = b.getAttribute('data-jur') === STATE.jur;
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+    b.tabIndex = on ? 0 : -1;
+  }
+  // Etiquetas dinámicas fuera del ciclo de render (el donut y el payslip se
+  // re-etiquetan en render()/fillPayslip() con la misma fuente: jurMeta()).
+  $('lbl-tax').textContent = m.taxLabel;
+  $('lbl-ni').textContent = m.niLabel;
+  $('hero-badge').textContent = m.badge;
+  $('jur-hint').textContent = m.jurHint;
+  $('pension-hint').textContent = m.pensionHint;
+}
+
+function applyJur(jur, focusBtn) {
+  STATE.jur = jur === 'UK' ? 'UK' : 'GIB';
+  syncJurUI();
+  render();
+  persist();
+  if (focusBtn) {
+    const b = elJurBtns.filter((x) => x.getAttribute('data-jur') === STATE.jur)[0];
+    if (b) b.focus();
+  }
+}
+
+for (const b of elJurBtns) {
+  b.addEventListener('click', () => applyJur(b.getAttribute('data-jur')));
+  b.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight' &&
+        ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    ev.preventDefault();
+    applyJur(STATE.jur === 'GIB' ? 'UK' : 'GIB', true);  // solo hay 2 opciones
+  });
+}
+
 function syncModeUI() {
   const meta = MODE_META[STATE.mode] || MODE_META.annual;
   elGrossLabel.textContent = meta.label;
@@ -1611,6 +1880,7 @@ function hydrateInputs() {
   elPension.value = STATE.pension;
   elExpPrefix.textContent = elExpCurrency.value === 'EUR' ? '€' : '£';
   syncModeUI();
+  syncJurUI();
 }
 
 function init() {
@@ -1625,6 +1895,8 @@ function init() {
   if (!(Number.isFinite(STATE.wpy) && STATE.wpy > 0)) STATE.wpy = DEFAULTS.wpy;
   if (!(Number.isFinite(STATE.pension) && STATE.pension >= 0)) STATE.pension = 0;
   STATE.pension = Math.min(100, STATE.pension);
+  // Jurisdicción: cualquier valor no reconocido → Gibraltar (default).
+  if (STATE.jur !== 'UK' && STATE.jur !== 'GIB') STATE.jur = 'GIB';
   if (!Array.isArray(STATE.expenses)) STATE.expenses = [];
   STATE.expenses = STATE.expenses.map(normalizeExpense).filter(Boolean);
   if (!['light', 'dark', 'auto'].includes(STATE.theme)) STATE.theme = 'auto';

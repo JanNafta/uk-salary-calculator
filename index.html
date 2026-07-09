@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light dark" />
-  <title>UK Salary Calculator · 2024/25</title>
+  <title>Calculadora de sueldo UK &amp; Gibraltar · UK 2026/27 · GIB 2025/26</title>
   <!-- Favicon emoji inline (sin red, sin 404 en consola). -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B7%3C/text%3E%3C/svg%3E" />
   <!-- Entregable 5: aplica el tema ANTES del primer paint (sin FOUC).
@@ -40,9 +40,9 @@
     <header class="hero">
       <div class="hero-bar">
         <div class="hero-titles">
-          <div class="hero-badge">GBP → EUR · 2024/25</div>
-          <h1>Calculadora de sueldo UK</h1>
-          <p class="subtitle">Sueldo bruto en libras → neto tras impuestos. Anual y mensual, en GBP y EUR.</p>
+          <div class="hero-badge" id="hero-badge">GBP → EUR · Gibraltar 2025/26</div>
+          <h1>Calculadora de sueldo UK &amp; Gibraltar</h1>
+          <p class="subtitle">Sueldo bruto en libras → neto tras impuestos en Gibraltar (GIBS) o Reino Unido. Anual y mensual, en GBP y EUR.</p>
         </div>
         <div class="theme-toggle" role="radiogroup" aria-label="Tema de color">
           <button type="button" class="th-btn" data-theme-set="light" role="radio" aria-checked="false" title="Tema claro">☀️</button>
@@ -56,6 +56,17 @@
       <div class="inputs-header">
         <h2 class="block-title inputs-title">Datos de entrada</h2>
       </div>
+      <!-- Selector de jurisdicción fiscal (GIBS Gibraltar / PAYE UK).
+           Radiogroup segmentado, persistido en ukcalc.v1 y en la URL (?j=). -->
+      <div class="field jur-field">
+        <label id="jur-label">Jurisdicción fiscal</label>
+        <div class="seg-control" role="radiogroup" aria-labelledby="jur-label">
+          <button type="button" class="seg-btn" data-jur="GIB" role="radio" aria-checked="true">🇬🇮 Gibraltar (GIBS)</button>
+          <button type="button" class="seg-btn" data-jur="UK" role="radio" aria-checked="false">🇬🇧 Reino Unido</button>
+        </div>
+        <small class="hint" id="jur-hint">GIBS: sin personal allowance, se tributa desde la primera libra. SI 10% con tope £176,76/mes.</small>
+      </div>
+
       <div class="field">
         <label for="mode">Tipo de entrada</label>
         <select id="mode" aria-describedby="mode-help">
@@ -95,7 +106,7 @@
           <input id="pension" type="number" min="0" max="100" step="0.5" value="0" inputmode="decimal" />
           <span class="prefix suffix">%</span>
         </div>
-        <small class="hint">Opcional. Reduce la renta sujeta a Income Tax (esquema <em>net pay</em>).</small>
+        <small class="hint" id="pension-hint">Opcional. Reduce la renta sujeta al impuesto GIBS (deducción máx. £1.500/año). No reduce la base de Social Insurance.</small>
       </div>
 
       <div class="field derived" id="derived-field" hidden>
@@ -122,12 +133,12 @@
           <span class="card-eur" id="r-gross-eur">€0</span>
         </div>
         <div class="card tax">
-          <span class="card-label">Income Tax</span>
+          <span class="card-label" id="lbl-tax">Impuesto (GIBS)</span>
           <span class="card-gbp" id="r-tax-gbp">£0</span>
           <span class="card-eur" id="r-tax-eur">€0</span>
         </div>
         <div class="card tax">
-          <span class="card-label">National Insurance</span>
+          <span class="card-label" id="lbl-ni">Social Insurance</span>
           <span class="card-gbp" id="r-ni-gbp">£0</span>
           <span class="card-eur" id="r-ni-eur">€0</span>
         </div>
@@ -158,6 +169,10 @@
         </div>
       </div>
 
+      <!-- Chip de verificación: solo con jurisdicción Gibraltar y bruto anual
+           derivado exactamente £55.000 (contraste con una nómina real anónima). -->
+      <p class="verify-chip" id="verify-chip" hidden>✓ Verificado contra una nómina real de Gibraltar (jul 2026) · dif ±£0,05/mes por redondeo PAYE</p>
+
       <div class="breakdown" aria-label="Desglose del bruto anual">
         <h2 class="block-title">Desglose del bruto</h2>
         <div class="chart-row">
@@ -181,6 +196,29 @@
           <ul class="legend" id="legend" aria-label="Leyenda interactiva del desglose"></ul>
         </div>
         <p id="donut-sr" class="sr-only" aria-live="polite"></p>
+      </div>
+
+      <!-- Comparador UK ↔ Gibraltar: mismo bruto (y pensión), neto lado a
+           lado en ambas jurisdicciones + delta mensual destacada. -->
+      <div class="compare" id="compare" aria-label="Comparador UK y Gibraltar" hidden>
+        <h2 class="block-title">Mismo bruto: UK ↔ Gibraltar</h2>
+        <div class="cmp-grid">
+          <div class="cmp-col" id="cmp-col-gib">
+            <span class="cmp-name">🇬🇮 Gibraltar <span class="cmp-year">GIBS 2025/26</span></span>
+            <span class="cmp-netm" id="cmp-gib-m">£0</span>
+            <span class="cmp-sub">neto / mes</span>
+            <span class="cmp-nety" id="cmp-gib-y">£0</span>
+            <span class="cmp-sub">neto / año</span>
+          </div>
+          <div class="cmp-col" id="cmp-col-uk">
+            <span class="cmp-name">🇬🇧 Reino Unido <span class="cmp-year">PAYE 2026/27</span></span>
+            <span class="cmp-netm" id="cmp-uk-m">£0</span>
+            <span class="cmp-sub">neto / mes</span>
+            <span class="cmp-nety" id="cmp-uk-y">£0</span>
+            <span class="cmp-sub">neto / año</span>
+          </div>
+        </div>
+        <p class="cmp-delta" id="cmp-delta" aria-live="polite"></p>
       </div>
     </section>
 
@@ -282,20 +320,20 @@
     </section>
 
     <footer class="foot">
-      <p>Cálculo orientativo · Inglaterra 2024/25 · No constituye asesoramiento fiscal.</p>
+      <p>Cálculo orientativo · Gibraltar (GIBS) 2025/26 · Inglaterra 2026/27 · No constituye asesoramiento fiscal.</p>
     </footer>
   </main>
 
   <!-- Entregable 3: resumen imprimible tipo payslip (solo visible al imprimir). -->
   <section class="payslip" id="payslip" aria-hidden="true">
-    <h1 class="ps-title">Resumen de nómina · Reino Unido 2024/25</h1>
+    <h1 class="ps-title" id="ps-title">Resumen de nómina · Gibraltar 2025/26</h1>
     <p class="ps-sub" id="ps-date"></p>
     <div class="ps-chart" id="ps-chart" aria-hidden="true"></div>
     <table class="ps-table">
       <tbody>
         <tr><th>Bruto anual</th><td id="ps-gross-gbp"></td><td id="ps-gross-eur"></td></tr>
-        <tr><th>Income Tax</th><td id="ps-tax-gbp"></td><td id="ps-tax-eur"></td></tr>
-        <tr><th>National Insurance</th><td id="ps-ni-gbp"></td><td id="ps-ni-eur"></td></tr>
+        <tr><th id="ps-tax-th">Impuesto (GIBS)</th><td id="ps-tax-gbp"></td><td id="ps-tax-eur"></td></tr>
+        <tr><th id="ps-ni-th">Social Insurance</th><td id="ps-ni-gbp"></td><td id="ps-ni-eur"></td></tr>
         <tr id="ps-pen-row"><th>Pensión</th><td id="ps-pen-gbp"></td><td id="ps-pen-eur"></td></tr>
         <tr class="ps-strong"><th>Neto anual</th><td id="ps-net-gbp"></td><td id="ps-net-eur"></td></tr>
         <tr class="ps-strong"><th>Neto mensual</th><td id="ps-netm-gbp"></td><td id="ps-netm-eur"></td></tr>
@@ -304,6 +342,7 @@
       </tbody>
     </table>
     <div class="ps-budget" id="ps-budget" aria-hidden="true"></div>
+    <p class="ps-foot" id="ps-compare"></p>
     <p class="ps-foot" id="ps-rate"></p>
     <p class="ps-foot">Cálculo orientativo. No constituye asesoramiento fiscal.</p>
   </section>

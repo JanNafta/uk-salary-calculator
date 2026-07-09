@@ -499,6 +499,45 @@ select#mode:focus-visible, .exp-form select:focus-visible {
   letter-spacing: var(--tracking-tight);
 }
 
+/* ---- Selector de jurisdicción (Gibraltar/UK) — control segmentado ------ */
+.jur-field { grid-column: 1 / -1; }
+.seg-control {
+  display: flex; gap: 3px; padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-2);
+  border-radius: var(--r-full);
+}
+.seg-btn {
+  /* Borde transparente en reposo: al marcar solo cambia el color (sin
+     salto de layout de 1px). */
+  flex: 1 1 0; border: 1px solid transparent; background: transparent; cursor: pointer;
+  min-height: 44px;
+  border-radius: var(--r-full);
+  padding: 9px 16px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  font-family: var(--font);
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease-soft),
+              color var(--t-fast) var(--ease-soft),
+              box-shadow var(--t-fast) var(--ease-soft),
+              transform var(--t-fast) var(--ease);
+}
+.seg-btn:hover { color: var(--ink); background: var(--surface-3); }
+.seg-btn:active { transform: scale(0.97); }
+.seg-btn[aria-checked="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--hairline);
+}
+.seg-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* Campo de tasa */
 .rate-status { font-size: var(--fs-caption); color: var(--ink-2); line-height: 1.5; }
 .rate-status.ok { color: var(--success); font-weight: 500; }
@@ -636,6 +675,91 @@ select#mode:focus-visible, .exp-form select:focus-visible {
   font-size: var(--fs-base);
   font-weight: 500;
 }
+
+/* ---- Chip de verificación contra nómina real (solo GIB · £55.000) ------ */
+.verify-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: var(--sp-3);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--net);
+  background: var(--card-net-bg);
+  border: 1px solid var(--card-net-bd);
+  border-radius: var(--r-full);
+  padding: 5px 12px;
+  line-height: 1.4;
+}
+.verify-chip[hidden] { display: none; }
+
+/* ---- Comparador UK ↔ Gibraltar (mismo bruto) --------------------------- */
+.compare { margin-top: var(--sp-6); }
+.compare[hidden] { display: none; }
+.cmp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+}
+.cmp-col {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  background: var(--surface-2);
+  display: flex; flex-direction: column; gap: 2px;
+  transition: background-color var(--t) var(--ease-soft),
+              border-color var(--t) var(--ease-soft);
+}
+.cmp-name {
+  font-size: var(--fs-caption);
+  color: var(--ink-2);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.cmp-year {
+  font-weight: 500;
+  color: var(--ink-3);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.cmp-netm {
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
+  line-height: 1.1;
+  margin-top: var(--sp-1);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-nety {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-top: var(--sp-2);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-sub {
+  font-size: var(--fs-caption);
+  color: var(--ink-3);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+/* Jurisdicción ganadora en verde */
+.cmp-col.is-winner {
+  background: var(--card-net-bg);
+  border-color: var(--card-net-bd);
+}
+.cmp-col.is-winner .cmp-netm { color: var(--net); }
+.cmp-delta {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-body);
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+.cmp-delta .cmp-winner { color: var(--net); font-weight: 700; }
+.cmp-delta.is-tie { color: var(--ink-2); }
 
 /* ===================== 6. DONUT / LEYENDA / HISTÓRICO ================== */
 .breakdown { margin-top: var(--sp-6); }
